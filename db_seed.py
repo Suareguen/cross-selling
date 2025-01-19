@@ -1,82 +1,155 @@
-import pymongo
-import random
+from pymongo import MongoClient
 from faker import Faker
-import datetime
-import numpy as np
+import random
+from datetime import datetime, timedelta
 
-# Configuración de MongoDB
-client = pymongo.MongoClient("mongodb://localhost:27017/")
-db = client["ecommerce_cross"]
-
-# Crear instancias de las colecciones
-users_collection = db["users"]
-products_collection = db["products"]
-interactions_collection = db["interactions"]
-
-# Limpiar la base de datos existente
-users_collection.delete_many({})
-products_collection.delete_many({})
-interactions_collection.delete_many({})
+# Conexión a MongoDB
+client = MongoClient("mongodb://localhost:27017/")
+db = client["my_database"]  # Cambia el nombre de la base de datos
+customers_table = db["customers"]  # Cambia el nombre de la colección de clientes
+products_table = db["products"]  # Cambia el nombre de la colección de productos
+categories_table = db["categories"]  # Cambia el nombre de la colección de categorías
+orders_table = db["orders"]  # Cambia el nombre de la colección de órdenes
 
 # Instancia de Faker
 fake = Faker()
 
-# Generar usuarios
-def generate_users(n_users=1000):
-    users = []
-    for i in range(n_users):
-        user = {
-            "_id": str(i + 1),
-            "name": fake.name(),
-            "email": fake.email(),
-            "created_at": fake.date_time_this_decade()
-        }
-        users.append(user)
-    users_collection.insert_many(users)
+# Generar datos ficticios para clientes
+def generate_customers(n):
+    customers = []
+    for _ in range(n):
+        title_id = random.choice([1, 2, 0])  # Mr = 1, Ms = 2, else 0
+        first_name = fake.first_name_male() if title_id == 1 else fake.first_name_female()
+        last_name = fake.last_name()
+        email = fake.email()
+        password = fake.password()
+        birthday = fake.date_of_birth(minimum_age=18, maximum_age=80).strftime("%Y-%m-%d")
+        newsletter = random.choice([0, 1])
+        opt_in = random.choice([0, 1])
+        registration_date = fake.date_between(start_date="-10y", end_date="today").strftime("%Y-%m-%d")
+        groups = random.choice(["Customer", "Customer, Carribean", "VIP"])
+        default_group_id = random.randint(1, 5)
 
-# Generar productos
-def generate_products(n_products=500):
-    categories = ["Electronics", "Books", "Clothing", "Home", "Toys", "Sports", "Beauty"]
+        customer = {
+            "Customer ID": fake.uuid4(),
+            "Active": 1,
+            "Title ID": title_id,
+            "Email": email,
+            "Password": password,
+            "Birthday": birthday,
+            "Last Name": last_name,
+            "First Name": first_name,
+            "Newsletter": newsletter,
+            "Opt-in": opt_in,
+            "Registration Date": registration_date,
+            "Groups": groups,
+            "Default Group ID": default_group_id,
+        }
+        customers.append(customer)
+    return customers
+
+# Generar datos ficticios para productos
+def generate_products(n, categories):
     products = []
-    for i in range(n_products):
+    for _ in range(n):
+        name = fake.word().capitalize()
+        category = random.choice(categories)
+        price = round(random.uniform(10, 1000), 2)
+        tax_rules_id = random.randint(1, 5)
+        wholesale_price = round(price * random.uniform(0.5, 0.8), 2)
+        on_sale = random.choice([0, 1])
+        discount_amount = round(price * random.uniform(0.05, 0.3), 2) if on_sale else 0
+        discount_percent = round((discount_amount / price) * 100, 2) if on_sale else 0
+        quantity = random.randint(1, 1000)
+        description = fake.text(max_nb_chars=200)
+
         product = {
-            "_id": str(i + 1),
-            "name": fake.catch_phrase(),
-            "category": random.choice(categories),
-            "price": round(random.uniform(5.0, 500.0), 2),
-            "created_at": fake.date_time_this_decade()
+            "Product ID": fake.uuid4(),
+            "Active": 1,
+            "Name": name,
+            "Category": category,
+            "Price (tax excluded)": price,
+            "Tax rules ID": tax_rules_id,
+            "Wholesale price": wholesale_price,
+            "On sale": on_sale,
+            "Discount amount": discount_amount,
+            "Discount percent": discount_percent,
+            "Quantity": quantity,
+            "Description": description,
         }
         products.append(product)
-    products_collection.insert_many(products)
+    return products
 
-# Generar interacciones
-def generate_interactions(n_interactions=100000):
-    user_ids = [user["_id"] for user in users_collection.find()]
-    product_ids = [product["_id"] for product in products_collection.find()]
-    interactions = []
-
-    for _ in range(n_interactions):
-        interaction = {
-            "user_id": random.choice(user_ids),
-            "product_id": random.choice(product_ids),
-            "interaction": random.choices([1, 2, 3], weights=[0.7, 0.2, 0.1])[0],  # 1: Viewed, 2: Added to Cart, 3: Purchased
-            "timestamp": fake.date_time_this_year()
+# Insertar categorías en la base de datos
+def insert_categories(categories_data):
+    categories = []
+    for _, row in categories_data.iterrows():
+        category = {
+            "Category ID": row["Category ID"],
+            "Active": row["Active (0/1)"],
+            "Name": row["Name *"],
+            "Parent Category": row["Parent category"],
+            "Root Category": row["Root category (0/1)"],
+            "Description": row["Description"],
+            "Meta Title": row["Meta title"],
+            "Meta Keywords": row["Meta keywords"],
+            "Meta Description": row["Meta description"],
+            "URL Rewritten": row["URL rewritten"],
+            "Image URL": row["Image URL"],
         }
-        interactions.append(interaction)
-    
-    # Inserción en lotes para mayor rendimiento
-    batch_size = 1000
-    for i in range(0, len(interactions), batch_size):
-        interactions_collection.insert_many(interactions[i:i + batch_size])
+        categories.append(category)
+    categories_table.insert_many(categories)
+    return [cat["Name"] for cat in categories]  # Retorna los nombres de las categorías
 
-# Llamadas para generar los datos
-print("Generando usuarios...")
-generate_users(n_users=1000)
+# Generar datos ficticios para órdenes
+def generate_orders(n, customer_ids, product_ids):
+    orders = []
+    for _ in range(n):
+        order = {
+            "Order ID": fake.uuid4(),
+            "Customer ID": random.choice(customer_ids),
+            "Product ID": random.choice(product_ids),
+            "ID Carrier": random.randint(1, 10),
+            "ID Lang": random.randint(1, 5),
+            "ID Currency": random.randint(1, 3),
+            "Total Paid": round(random.uniform(20, 500), 2),
+            "Total Products": random.randint(1, 5),
+            "Total Shipping": round(random.uniform(5, 50), 2),
+            "Payment Method": random.choice(["Credit Card", "PayPal", "Bank Transfer"]),
+            "Order Date": fake.date_between(start_date="-5y", end_date="today").strftime("%Y-%m-%d"),
+        }
+        orders.append(order)
+    return orders
 
-print("Generando productos...")
-generate_products(n_products=500)
+# Cargar datos del archivo CSV de categorías
+import pandas as pd
+categories_file_path = "categories_import.csv"
+categories_df = pd.read_csv(categories_file_path, sep=';')
 
-print("Generando interacciones...")
-generate_interactions(n_interactions=100000)
+# Insertar datos ficticios en la base de datos
+num_customers = 100  # Cambia la cantidad de clientes que deseas generar
+num_products = 50  # Cambia la cantidad de productos que deseas generar
+num_orders = 200  # Cambia la cantidad de órdenes que deseas generar
 
-print("¡Base de datos generada exitosamente!")
+# Insertar categorías y obtener sus nombres
+category_names = insert_categories(categories_df)
+
+# Generar clientes y productos
+fake_customers = generate_customers(num_customers)
+fake_products = generate_products(num_products, category_names)
+
+# Insertar clientes y productos
+customers_table.insert_many(fake_customers)
+products_table.insert_many(fake_products)
+
+# Generar e insertar órdenes
+customer_ids = [customer["Customer ID"] for customer in fake_customers]
+product_ids = [product["Product ID"] for product in fake_products]
+fake_orders = generate_orders(num_orders, customer_ids, product_ids)
+
+orders_table.insert_many(fake_orders)
+
+print(f"Se han insertado {num_customers} clientes ficticios en la colección 'customers'.")
+print(f"Se han insertado {num_products} productos ficticios en la colección 'products'.")
+print(f"Se han insertado {num_orders} órdenes ficticias en la colección 'orders'.")
+print("Se han insertado las categorías en la colección 'categories'.")

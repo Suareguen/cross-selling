@@ -1,0 +1,37 @@
+Campo,Descripción
+id_order,ID del pedido
+id_carrier,ID del transportista
+id_lang,ID del idioma
+id_customer,ID del cliente
+id_cart,ID del carrito
+id_currency,ID de la moneda
+id_address_delivery,ID de dirección de entrega
+id_address_invoice,ID de dirección de facturación
+current_state,Estado actual
+secure_key,Clave de seguridad
+payment,Método de pago
+conversion_rate,Tasa de conversión
+module,Módulo de pago
+total_discounts,Total de descuentos
+total_discounts_tax_incl,Descuentos (c/ impuestos)
+total_discounts_tax_excl,Descuentos (s/ impuestos)
+total_paid,Total pagado
+total_paid_tax_incl,Total pagado (c/ impuestos)
+total_paid_tax_excl,Total pagado (s/ impuestos)
+total_paid_real,Total pagado real
+total_products,Total productos
+total_products_wt,Total productos (c/ impuestos)
+total_shipping,Total envío
+total_shipping_tax_incl,Envío (c/ impuestos)
+total_shipping_tax_excl,Envío (s/ impuestos)
+total_wrapping,Total envoltorio
+total_wrapping_tax_incl,Envoltorio (c/ impuestos)
+total_wrapping_tax_excl,Envoltorio (s/ impuestos)
+invoice_number,Número de factura
+delivery_number,Número de entrega
+invoice_date,Fecha de factura
+delivery_date,Fecha de entrega
+valid,Pedido válido
+date_add,Fecha de creación
+date_upd,Última actualización
+reference,Referencia
