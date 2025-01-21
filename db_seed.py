@@ -1,18 +1,84 @@
 # from pymongo import MongoClient
 # from faker import Faker
 # import random
-# from datetime import datetime, timedelta
+# import pandas as pd
+# import uuid
 
 # # Conexión a MongoDB
 # client = MongoClient("mongodb://localhost:27017/")
 # db = client["my_database"]  # Cambia el nombre de la base de datos
-# customers_table = db["customers"]  # Cambia el nombre de la colección de clientes
-# products_table = db["products"]  # Cambia el nombre de la colección de productos
-# categories_table = db["categories"]  # Cambia el nombre de la colección de categorías
-# orders_table = db["orders"]  # Cambia el nombre de la colección de órdenes
+# customers_table = db["customers"]  # Colección de clientes
+# products_table = db["products"]  # Colección de productos
+# categories_table = db["categories"]  # Colección de categorías
+# orders_table = db["orders"]  # Colección de órdenes
 
 # # Instancia de Faker
 # fake = Faker()
+
+# # Crear categorías generales
+# def create_general_categories():
+#     general_categories = [
+#         {"Category ID": str(uuid.uuid4()), "Name": "Electronics", "Description": "Electronic gadgets and devices"},
+#         {"Category ID": str(uuid.uuid4()), "Name": "Fashion", "Description": "Clothing, footwear, and accessories"},
+#         {"Category ID": str(uuid.uuid4()), "Name": "Home & Furniture", "Description": "Furniture and home essentials"},
+#         {"Category ID": str(uuid.uuid4()), "Name": "Sports & Outdoors", "Description": "Sporting goods and outdoor gear"},
+#         {"Category ID": str(uuid.uuid4()), "Name": "Books & Media", "Description": "Books, movies, music, and games"},
+#         {"Category ID": str(uuid.uuid4()), "Name": "Health & Beauty", "Description": "Health and beauty products"},
+#     ]
+#     categories_table.insert_many(general_categories)
+#     return {category["Name"]: category["Category ID"] for category in general_categories}
+
+# # Procesar dataset externo de productos y asignar categorías generales
+# def process_external_products_with_categories(file_path, general_categories_map):
+#     # Cargar el dataset externo
+#     data = pd.read_csv(file_path)
+
+#     # Función para asignar una categoría general
+#     def assign_general_category(category_name):
+#         for general_category, specific_categories in {
+#             "Electronics": ["Mobiles", "Laptops", "Tablets", "Cameras", "Headphones"],
+#             "Fashion": ["Clothing", "Footwear", "Watches", "Jewelry"],
+#             "Home & Furniture": ["Furniture", "Home Decor", "Kitchen", "Bedding"],
+#             "Sports & Outdoors": ["Fitness Equipment", "Outdoor Gear", "Bicycles"],
+#             "Books & Media": ["Books", "Movies", "Music", "Video Games"],
+#             "Health & Beauty": ["Skincare", "Haircare", "Makeup", "Health Devices"],
+#         }.items():
+#             if any(specific in category_name for specific in specific_categories):
+#                 return general_categories_map[general_category]
+#         return general_categories_map.get("Others", "Unknown")
+
+#     # Transformar y mapear columnas
+#     data["Product ID"] = [str(uuid.uuid4()) for _ in range(len(data))]
+#     data["Active"] = 1
+#     data["Name"] = data["product_name"]
+    
+#     # Manejo seguro de la categoría
+#     def extract_category(category_tree):
+#         if pd.notna(category_tree) and ">>" in category_tree:
+#             categories = category_tree.split(">>")
+#             return categories[1].strip() if len(categories) > 1 else categories[0].strip()
+#         return "Unknown"
+
+#     data["Category"] = data["product_category_tree"].apply(extract_category)
+#     data["General Category ID"] = data["Category"].apply(assign_general_category)
+#     data["Price (tax excluded)"] = data["retail_price"]
+#     data["Tax rules ID"] = [random.randint(1, 5) for _ in range(len(data))]
+#     data["Wholesale price"] = data["retail_price"] * random.uniform(0.5, 0.8)
+#     data["On sale"] = data.apply(
+#         lambda row: 1 if row["retail_price"] > row["discounted_price"] else 0, axis=1
+#     )
+#     data["Discount amount"] = data["retail_price"] - data["discounted_price"]
+#     data["Discount percent"] = (data["Discount amount"] / data["retail_price"]) * 100
+#     data["Quantity"] = [random.randint(1, 100) for _ in range(len(data))]
+#     data["Description"] = data["description"]
+
+#     # Seleccionar columnas necesarias
+#     mapped_products = data[[
+#         "Product ID", "Active", "Name", "Category", "General Category ID", 
+#         "Price (tax excluded)", "Tax rules ID", "Wholesale price", 
+#         "On sale", "Discount amount", "Discount percent", "Quantity", "Description"
+#     ]]
+#     return mapped_products.to_dict(orient="records")
 
 # # Generar datos ficticios para clientes
 # def generate_customers(n):
@@ -48,117 +114,108 @@
 #         customers.append(customer)
 #     return customers
 
-# # Generar datos ficticios para productos
-# def generate_products(n, categories):
-#     products = []
-#     for _ in range(n):
-#         name = fake.word().capitalize()
-#         category = random.choice(categories)
-#         price = round(random.uniform(10, 1000), 2)
-#         tax_rules_id = random.randint(1, 5)
-#         wholesale_price = round(price * random.uniform(0.5, 0.8), 2)
-#         on_sale = random.choice([0, 1])
-#         discount_amount = round(price * random.uniform(0.05, 0.3), 2) if on_sale else 0
-#         discount_percent = round((discount_amount / price) * 100, 2) if on_sale else 0
-#         quantity = random.randint(1, 1000)
-#         description = fake.text(max_nb_chars=200)
-
-#         product = {
-#             "Product ID": fake.uuid4(),
-#             "Active": 1,
-#             "Name": name,
-#             "Category": category,
-#             "Price (tax excluded)": price,
-#             "Tax rules ID": tax_rules_id,
-#             "Wholesale price": wholesale_price,
-#             "On sale": on_sale,
-#             "Discount amount": discount_amount,
-#             "Discount percent": discount_percent,
-#             "Quantity": quantity,
-#             "Description": description,
-#         }
-#         products.append(product)
-#     return products
-
-# # Insertar categorías en la base de datos
-# def insert_categories(categories_data):
-#     categories = []
-#     for _, row in categories_data.iterrows():
-#         category = {
-#             "Category ID": row["Category ID"],
-#             "Active": row["Active (0/1)"],
-#             "Name": row["Name *"],
-#             "Parent Category": row["Parent category"],
-#             "Root Category": row["Root category (0/1)"],
-#             "Description": row["Description"],
-#             "Meta Title": row["Meta title"],
-#             "Meta Keywords": row["Meta keywords"],
-#             "Meta Description": row["Meta description"],
-#             "URL Rewritten": row["URL rewritten"],
-#             "Image URL": row["Image URL"],
-#         }
-#         categories.append(category)
-#     categories_table.insert_many(categories)
-#     return [cat["Name"] for cat in categories]  # Retorna los nombres de las categorías
-
-# # Generar datos ficticios para órdenes
-# def generate_orders(n, customer_ids, product_ids):
+# # Generar datos ficticios para órdenes realistas
+# # Generar datos ficticios para órdenes realistas
+# def generate_orders_realistic(n, customer_ids, product_ids, product_categories, product_prices):
+#     """
+#     Genera órdenes ficticias realistas basadas en preferencias de categoría y rango de precios.
+    
+#     Args:
+#         n (int): Número de órdenes a generar.
+#         customer_ids (list): Lista de IDs de clientes.
+#         product_ids (list): Lista de IDs de productos.
+#         product_categories (dict): Diccionario {Product ID: Category}.
+#         product_prices (dict): Diccionario {Product ID: Precio}.
+        
+#     Returns:
+#         list: Lista de órdenes ficticias.
+#     """
 #     orders = []
-#     for _ in range(n):
-#         order = {
-#             "Order ID": fake.uuid4(),
-#             "Customer ID": random.choice(customer_ids),
-#             "Product ID": random.choice(product_ids),
-#             "ID Carrier": random.randint(1, 10),
-#             "ID Lang": random.randint(1, 5),
-#             "ID Currency": random.randint(1, 3),
-#             "Total Paid": round(random.uniform(20, 500), 2),
-#             "Total Products": random.randint(1, 5),
-#             "Total Shipping": round(random.uniform(5, 50), 2),
-#             "Payment Method": random.choice(["Credit Card", "PayPal", "Bank Transfer"]),
-#             "Order Date": fake.date_between(start_date="-5y", end_date="today").strftime("%Y-%m-%d"),
+
+#     # Asignar categorías preferidas y rango de precios a cada cliente
+#     customer_profiles = {
+#         customer_id: {
+#             "preferred_categories": random.sample(
+#                 list(set(product_categories.values())), k=random.randint(1, 3)
+#             ),
+#             "price_range": (random.uniform(10, 100), random.uniform(200, 500)),
 #         }
-#         orders.append(order)
+#         for customer_id in customer_ids
+#     }
+
+#     for _ in range(n):
+#         customer_id = random.choice(customer_ids)
+#         profile = customer_profiles[customer_id]
+        
+#         # Filtrar productos por categorías preferidas y rango de precios
+#         preferred_products = [
+#             prod_id for prod_id in product_ids
+#             if product_categories[prod_id] in profile["preferred_categories"]
+#             and profile["price_range"][0] <= product_prices[prod_id] <= profile["price_range"][1]
+#         ]
+        
+#         # Si no hay productos que cumplan las preferencias, usar todos los productos
+#         if not preferred_products:
+#             preferred_products = product_ids
+        
+#         # Seleccionar productos para la orden
+#         num_products_in_order = random.randint(1, min(5, len(preferred_products)))  # Ajustar el máximo a la cantidad disponible
+#         selected_products = random.sample(preferred_products, k=num_products_in_order)
+
+#         for product_id in selected_products:
+#             order = {
+#                 "Order ID": str(uuid.uuid4()),
+#                 "Customer ID": customer_id,
+#                 "Product ID": product_id,
+#                 "ID Carrier": random.randint(1, 10),
+#                 "ID Lang": random.randint(1, 5),
+#                 "ID Currency": random.randint(1, 3),
+#                 "Total Paid": round(product_prices[product_id] + random.uniform(5, 50), 2),
+#                 "Total Products": 1,
+#                 "Total Shipping": round(random.uniform(5, 20), 2),
+#                 "Payment Method": random.choice(["Credit Card", "PayPal", "Bank Transfer"]),
+#                 "Order Date": fake.date_between(start_date="-5y", end_date="today").strftime("%Y-%m-%d"),
+#             }
+#             orders.append(order)
+
 #     return orders
 
-# # Cargar datos del archivo CSV de categorías
-# import pandas as pd
-# categories_file_path = "categories_import.csv"
-# categories_df = pd.read_csv(categories_file_path, sep=';')
 
-# # Insertar datos ficticios en la base de datos
-# num_customers = 100  # Cambia la cantidad de clientes que deseas generar
-# num_products = 200  # Cambia la cantidad de productos que deseas generar
-# num_orders = 500  # Cambia la cantidad de órdenes que deseas generar
+# # Archivo externo de productos
+# products_file_path = "flipkart_com-ecommerce_sample.csv"
 
-# # Insertar categorías y obtener sus nombres
-# category_names = insert_categories(categories_df)
+# # Crear categorías generales e insertar en la base de datos
+# general_categories_map = create_general_categories()
 
-# # Generar clientes y productos
+# # Procesar y cargar productos con categorías generales
+# processed_products = process_external_products_with_categories(products_file_path, general_categories_map)
+# products_table.insert_many(processed_products)
+
+# # Generar clientes ficticios
+# num_customers = 50
 # fake_customers = generate_customers(num_customers)
-# fake_products = generate_products(num_products, category_names)
-
-# # Insertar clientes y productos
 # customers_table.insert_many(fake_customers)
-# products_table.insert_many(fake_products)
 
-# # Generar e insertar órdenes
+# # Generar y almacenar órdenes realistas
 # customer_ids = [customer["Customer ID"] for customer in fake_customers]
-# product_ids = [product["Product ID"] for product in fake_products]
-# fake_orders = generate_orders(num_orders, customer_ids, product_ids)
-
+# product_ids = [product["Product ID"] for product in processed_products]
+# product_data = pd.DataFrame(processed_products)
+# product_categories = dict(zip(product_data["Product ID"], product_data["General Category ID"]))
+# product_prices = dict(zip(product_data["Product ID"], product_data["Price (tax excluded)"]))
+# num_orders = 100000
+# fake_orders = generate_orders_realistic(num_orders, customer_ids, product_ids, product_categories, product_prices)
 # orders_table.insert_many(fake_orders)
 
 # print(f"Se han insertado {num_customers} clientes ficticios en la colección 'customers'.")
-# print(f"Se han insertado {num_products} productos ficticios en la colección 'products'.")
-# print(f"Se han insertado {num_orders} órdenes ficticias en la colección 'orders'.")
-# print("Se han insertado las categorías en la colección 'categories'.")
+# print(f"Se han insertado {len(processed_products)} productos con categorías generales en la colección 'products'.")
+# print(f"Se han insertado {num_orders} órdenes realistas en la colección 'orders'.")
+# print(f"Se han creado 6 categorías generales en la colección 'categories'.")
+
 
 from pymongo import MongoClient
 from faker import Faker
 import random
 import pandas as pd
-import uuid
 
 # Conexión a MongoDB
 client = MongoClient("mongodb://localhost:27017/")
@@ -171,22 +228,42 @@ orders_table = db["orders"]  # Colección de órdenes
 # Instancia de Faker
 fake = Faker()
 
+# Contadores globales para IDs
+category_id_counter = 1
+product_id_counter = 1
+customer_id_counter = 1
+order_id_counter = 1
+
+def get_next_id(counter):
+    global category_id_counter, product_id_counter, customer_id_counter, order_id_counter
+    if counter == "category":
+        category_id_counter += 1
+        return category_id_counter - 1
+    elif counter == "product":
+        product_id_counter += 1
+        return product_id_counter - 1
+    elif counter == "customer":
+        customer_id_counter += 1
+        return customer_id_counter - 1
+    elif counter == "order":
+        order_id_counter += 1
+        return order_id_counter - 1
+
 # Crear categorías generales
 def create_general_categories():
     general_categories = [
-        {"Category ID": str(uuid.uuid4()), "Name": "Electronics", "Description": "Electronic gadgets and devices"},
-        {"Category ID": str(uuid.uuid4()), "Name": "Fashion", "Description": "Clothing, footwear, and accessories"},
-        {"Category ID": str(uuid.uuid4()), "Name": "Home & Furniture", "Description": "Furniture and home essentials"},
-        {"Category ID": str(uuid.uuid4()), "Name": "Sports & Outdoors", "Description": "Sporting goods and outdoor gear"},
-        {"Category ID": str(uuid.uuid4()), "Name": "Books & Media", "Description": "Books, movies, music, and games"},
-        {"Category ID": str(uuid.uuid4()), "Name": "Health & Beauty", "Description": "Health and beauty products"},
+        {"Category ID": get_next_id("category"), "Name": "Electronics", "Description": "Electronic gadgets and devices"},
+        {"Category ID": get_next_id("category"), "Name": "Fashion", "Description": "Clothing, footwear, and accessories"},
+        {"Category ID": get_next_id("category"), "Name": "Home & Furniture", "Description": "Furniture and home essentials"},
+        {"Category ID": get_next_id("category"), "Name": "Sports & Outdoors", "Description": "Sporting goods and outdoor gear"},
+        {"Category ID": get_next_id("category"), "Name": "Books & Media", "Description": "Books, movies, music, and games"},
+        {"Category ID": get_next_id("category"), "Name": "Health & Beauty", "Description": "Health and beauty products"},
     ]
     categories_table.insert_many(general_categories)
     return {category["Name"]: category["Category ID"] for category in general_categories}
 
 # Procesar dataset externo de productos y asignar categorías generales
 def process_external_products_with_categories(file_path, general_categories_map):
-    # Cargar el dataset externo
     data = pd.read_csv(file_path)
 
     # Función para asignar una categoría general
@@ -204,10 +281,10 @@ def process_external_products_with_categories(file_path, general_categories_map)
         return general_categories_map.get("Others", "Unknown")
 
     # Transformar y mapear columnas
-    data["Product ID"] = [str(uuid.uuid4()) for _ in range(len(data))]
+    data["Product ID"] = [get_next_id("product") for _ in range(len(data))]
     data["Active"] = 1
     data["Name"] = data["product_name"]
-    
+
     # Manejo seguro de la categoría
     def extract_category(category_tree):
         if pd.notna(category_tree) and ">>" in category_tree:
@@ -253,7 +330,7 @@ def generate_customers(n):
         default_group_id = random.randint(1, 5)
 
         customer = {
-            "Customer ID": fake.uuid4(),
+            "Customer ID": get_next_id("customer"),
             "Active": 1,
             "Title ID": title_id,
             "Email": email,
@@ -270,29 +347,49 @@ def generate_customers(n):
         customers.append(customer)
     return customers
 
-# Generar datos ficticios para órdenes
-def generate_orders(n, customer_ids, product_ids):
+# Generar órdenes realistas
+def generate_orders_realistic(n, customer_ids, product_ids, product_categories, product_prices):
     orders = []
-    for _ in range(n):
-        order = {
-            "Order ID": fake.uuid4(),
-            "Customer ID": random.choice(customer_ids),
-            "Product ID": random.choice(product_ids),
-            "ID Carrier": random.randint(1, 10),
-            "ID Lang": random.randint(1, 5),
-            "ID Currency": random.randint(1, 3),
-            "Total Paid": round(random.uniform(20, 500), 2),
-            "Total Products": random.randint(1, 5),
-            "Total Shipping": round(random.uniform(5, 50), 2),
-            "Payment Method": random.choice(["Credit Card", "PayPal", "Bank Transfer"]),
-            "Order Date": fake.date_between(start_date="-5y", end_date="today").strftime("%Y-%m-%d"),
+    customer_profiles = {
+        customer_id: {
+            "preferred_categories": random.sample(
+                list(set(product_categories.values())), k=random.randint(1, 3)
+            ),
+            "price_range": (random.uniform(10, 100), random.uniform(200, 500)),
         }
-        orders.append(order)
+        for customer_id in customer_ids
+    }
+
+    for _ in range(n):
+        customer_id = random.choice(customer_ids)
+        profile = customer_profiles[customer_id]
+        
+        preferred_products = [
+            prod_id for prod_id in product_ids
+            if product_categories[prod_id] in profile["preferred_categories"]
+            and profile["price_range"][0] <= product_prices[prod_id] <= profile["price_range"][1]
+        ]
+        
+        if not preferred_products:
+            preferred_products = product_ids
+        
+        num_products_in_order = random.randint(1, min(5, len(preferred_products)))
+        selected_products = random.sample(preferred_products, k=num_products_in_order)
+
+        for product_id in selected_products:
+            order = {
+                "Order ID": get_next_id("order"),
+                "Customer ID": customer_id,
+                "Product ID": product_id,
+                "Quantity": random.randint(1, 10),
+            }
+            orders.append(order)
     return orders
+
 
 # Archivo externo de productos
 products_file_path = "flipkart_com-ecommerce_sample.csv"
-
+print("Creando Base de Datos...")
 # Crear categorías generales e insertar en la base de datos
 general_categories_map = create_general_categories()
 
@@ -301,18 +398,21 @@ processed_products = process_external_products_with_categories(products_file_pat
 products_table.insert_many(processed_products)
 
 # Generar clientes ficticios
-num_customers = 100
+num_customers = 1000
 fake_customers = generate_customers(num_customers)
 customers_table.insert_many(fake_customers)
 
-# Generar órdenes ficticias
+# Generar y almacenar órdenes realistas
 customer_ids = [customer["Customer ID"] for customer in fake_customers]
 product_ids = [product["Product ID"] for product in processed_products]
-num_orders = 500
-fake_orders = generate_orders(num_orders, customer_ids, product_ids)
+product_data = pd.DataFrame(processed_products)
+product_categories = dict(zip(product_data["Product ID"], product_data["General Category ID"]))
+product_prices = dict(zip(product_data["Product ID"], product_data["Price (tax excluded)"]))
+num_orders = 50000
+fake_orders = generate_orders_realistic(num_orders, customer_ids, product_ids, product_categories, product_prices)
 orders_table.insert_many(fake_orders)
 
 print(f"Se han insertado {num_customers} clientes ficticios en la colección 'customers'.")
 print(f"Se han insertado {len(processed_products)} productos con categorías generales en la colección 'products'.")
-print(f"Se han insertado {num_orders} órdenes ficticias en la colección 'orders'.")
+print(f"Se han insertado {num_orders} órdenes realistas en la colección 'orders'.")
 print(f"Se han creado 6 categorías generales en la colección 'categories'.")

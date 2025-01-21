@@ -1,78 +1,98 @@
-from fastapi import FastAPI, HTTPException, Query
-from pymongo import MongoClient
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import pickle
 import pandas as pd
-from sklearn.neighbors import NearestNeighbors
-from scipy.sparse import csr_matrix
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
 
-# Conexión a MongoDB
-client = MongoClient("mongodb://localhost:27017/")
-db = client["ecommerce"]
-
-# Inicializar FastAPI
+# Inicializar la app de FastAPI
 app = FastAPI()
 
-# Cargar datos desde MongoDB
-def load_data():
-    interactions = pd.DataFrame(list(db.interactions.find()))
-    if interactions.empty:
-        raise RuntimeError("No se encontraron interacciones en la base de datos.")
-    return interactions
+# Cargar el modelo entrenado
+MODEL_PATH = "recommendation_model.pkl"
 
-# Crear matriz de interacción
-def create_interaction_matrix(interactions):
-    matrix = interactions.pivot_table(
-        index="user_id", columns="product_id", values="interaction", fill_value=0
-    )
-    sparse_matrix = csr_matrix(matrix)
-    return sparse_matrix, matrix
-
-# Entrenar modelo KNN
-def train_knn(sparse_matrix):
-    knn_model = NearestNeighbors(metric="cosine", algorithm="brute")
-    knn_model.fit(sparse_matrix)
-    return knn_model
-
-# Cargar modelo KNN (entrenar si es necesario)
 try:
-    interactions = load_data()
-    sparse_matrix, interaction_matrix = create_interaction_matrix(interactions)
-    knn_model = train_knn(sparse_matrix)
-    print("Modelo KNN entrenado con éxito.")
+    with open(MODEL_PATH, "rb") as file:
+        model_data = pickle.load(file)
+    
+    matrix = model_data["matrix"]
+    user_encoder = model_data["user_encoder"]
+    product_encoder = model_data["product_encoder"]
+    orders_with_categories = model_data["orders_with_categories"]
 except Exception as e:
-    print(f"Error durante la carga o entrenamiento del modelo: {e}")
+    raise RuntimeError(f"Error al cargar el modelo: {e}")
 
-# Endpoints
-@app.post("/register_user")
-async def register_user(name: str, email: str):
-    user = {"name": name, "email": email}
-    result = db.users.insert_one(user)
-    return {"message": "Usuario registrado correctamente", "user_id": str(result.inserted_id)}
+# Modelo para solicitudes
+class RecommendationRequest(BaseModel):
+    user_id: int
+    num_recommendations: int = 5
 
-@app.post("/register_product")
-async def register_product(name: str, category: str, price: float):
-    product = {"name": name, "category": category, "price": price}
-    result = db.products.insert_one(product)
-    return {"message": "Producto registrado correctamente", "product_id": str(result.inserted_id)}
+# Función para generar recomendaciones
+def recommend_products(user_id, matrix, user_encoder, product_encoder, orders_with_categories, num_recommendations=5):
+    if user_id not in user_encoder.classes_:
+        return [], []
 
-@app.post("/register_interaction")
-async def register_interaction(user_id: str, product_id: str, interaction: int):
-    interaction_data = {"user_id": user_id, "product_id": product_id, "interaction": interaction}
-    result = db.interactions.insert_one(interaction_data)
-    return {"message": "Interacción registrada correctamente", "interaction_id": str(result.inserted_id)}
+    user_index = int(user_encoder.transform([user_id])[0])  # Convertir a int
+    user_similarities = cosine_similarity(matrix)
+    similar_users = np.argsort(-user_similarities[user_index])
 
-@app.get("/recommend/{user_id}")
-async def recommend(user_id: str, top_n: int = Query(5, ge=1, le=20, description="Número de recomendaciones")):
-    # Verificar si el usuario existe en la base de datos
-    if user_id not in interaction_matrix.index:
-        raise HTTPException(status_code=404, detail=f"Usuario con ID {user_id} no encontrado")
+    user_categories = orders_with_categories[orders_with_categories["Customer ID"] == user_id]["Category"].unique()
+    candidate_products = orders_with_categories[orders_with_categories["Category"].isin(user_categories)]["Product Index"].unique()
 
-    # Obtener las recomendaciones
-    user_index = interaction_matrix.index.get_loc(user_id)
-    distances, indices = knn_model.kneighbors(interaction_matrix.iloc[user_index, :].values.reshape(1, -1), n_neighbors=top_n + 1)
+    # Excluir productos ya comprados por el usuario
+    purchased_products = orders_with_categories[orders_with_categories["Customer ID"] == user_id]["Product Index"].unique()
+    candidate_products = [int(product) for product in candidate_products if product not in purchased_products]
 
-    # Excluir el propio usuario de los resultados
-    similar_users = indices.flatten()[1:]
-    recommended_products = interaction_matrix.iloc[similar_users].sum(axis=0).sort_values(ascending=False)
-    recommended_products = recommended_products[interaction_matrix.loc[user_id] == 0].head(top_n)
+    # Recomendar productos basados en usuarios similares
+    scores = matrix[similar_users[1:], :].sum(axis=0)
+    max_score = scores.max() if scores.max() > 0 else 1
+    normalized_scores = [(int(i), scores[i] / max_score) for i in candidate_products if scores[i] > 0]
+    normalized_scores = sorted(normalized_scores, key=lambda x: x[1], reverse=True)
 
-    return {"user_id": user_id, "recommendations": recommended_products.index.tolist()}
+    product_mapping = orders_with_categories[["Product Index", "Product ID", "Name"]].drop_duplicates()
+    product_mapping = product_mapping.set_index("Product Index")
+
+    recommended_products = [
+        (
+            int(product_mapping.loc[product[0], "Product ID"]),  # Convertir a int
+            product_mapping.loc[product[0], "Name"],
+            round(float(product[1]), 2),  # Convertir a float
+        )
+        for product in normalized_scores[:num_recommendations]
+    ]
+
+    user_purchases = orders_with_categories[orders_with_categories["Customer ID"] == user_id][["Product ID", "Name", "Category"]].drop_duplicates()
+
+    return recommended_products, user_purchases
+
+
+@app.post("/recommendations/")
+def get_recommendations(request: RecommendationRequest):
+    user_id = request.user_id
+    num_recommendations = request.num_recommendations
+
+    # Validar que los datos estén cargados
+    if orders_with_categories is None or matrix is None:
+        raise HTTPException(status_code=500, detail="El modelo no está completamente cargado.")
+
+    # Obtener recomendaciones
+    recommendations, user_purchases = recommend_products(
+        user_id, matrix, user_encoder, product_encoder, orders_with_categories, num_recommendations
+    )
+
+    if not recommendations:
+        raise HTTPException(status_code=404, detail=f"No se encontraron recomendaciones para el usuario {user_id}.")
+
+    # Convertir user_purchases a un formato serializable
+    user_purchases_serializable = user_purchases.astype(str).to_dict(orient="records") if not user_purchases.empty else []
+
+    return {
+        "user_id": int(user_id),
+        "recommendations": recommendations,
+        "user_purchases": user_purchases_serializable
+    }
+
+# Endpoint de prueba
+@app.get("/")
+def root():
+    return {"message": "API de recomendaciones funcionando correctamente"}
