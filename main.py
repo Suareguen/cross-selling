@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pickle
 import pandas as pd
@@ -7,6 +8,15 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 # Inicializar la app de FastAPI
 app = FastAPI()
+
+# Configurar CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Permitir todas las solicitudes (cambiar esto en producción)
+    allow_credentials=True,
+    allow_methods=["*"],  # Permitir todos los métodos HTTP
+    allow_headers=["*"],  # Permitir todos los headers
+)
 
 # Cargar el modelo entrenado
 MODEL_PATH = "recommendation_model.pkl"
