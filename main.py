@@ -37,6 +37,9 @@ class RecommendationRequest(BaseModel):
     user_id: int
     num_recommendations: int = 5
 
+class ProductInfoRequest(BaseModel):
+    product_ids: list[int]  # Lista de IDs de productos
+
 # Función para generar recomendaciones
 def recommend_products(user_id, matrix, user_encoder, product_encoder, orders_with_categories, num_recommendations=5):
     if user_id not in user_encoder.classes_:
@@ -75,7 +78,6 @@ def recommend_products(user_id, matrix, user_encoder, product_encoder, orders_wi
 
     return recommended_products, user_purchases
 
-
 @app.post("/recommendations/")
 def get_recommendations(request: RecommendationRequest):
     user_id = request.user_id
@@ -101,6 +103,22 @@ def get_recommendations(request: RecommendationRequest):
         "recommendations": recommendations,
         "user_purchases": user_purchases_serializable
     }
+
+@app.post("/products/")
+def get_product_info(request: ProductInfoRequest):
+    product_ids = request.product_ids
+
+    # Validar que los datos estén cargados
+    if orders_with_categories is None:
+        raise HTTPException(status_code=500, detail="Los datos de productos no están disponibles.")
+
+    # Filtrar los productos solicitados
+    product_info = orders_with_categories[orders_with_categories["Product ID"].isin(product_ids)][["Product ID", "Name", "Category"]].drop_duplicates()
+
+    if product_info.empty:
+        raise HTTPException(status_code=404, detail="No se encontró información para los productos solicitados.")
+
+    return product_info.to_dict(orient="records")
 
 # Endpoint de prueba
 @app.get("/")
